@@ -1,6 +1,6 @@
 /**
  * @file rack_controller.cpp
- * @brief Controlador do Rack (NODE_RACK): NFC 2ª etapa, porta rack, ultrassônico, DHT22, OLED e servo.
+ * @brief Controlador do Rack (NODE_RACK): NFC 2ª etapa, porta rack, ultrassônico, DHT22, OLED, servo e ESP-NOW.
  */
 
 #if defined(NODE_RACK)
@@ -15,7 +15,6 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
-#include <esp_now.h>
 #include <time.h>
 
 #include "node_config.h"
@@ -33,8 +32,7 @@ Adafruit_SSD1306 display(128, 64, &Wire, -1);
 DHT dht(Pins::DHT_PIN, DHT22);
 WiFiClientSecure tlsClient;
 PubSubClient mqttClient(tlsClient);
-
-uint8_t PEER_MAC[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+Elo5EspNowLink espNowLink;
 
 constexpr uint8_t  SERVO_CH       = 6;
 constexpr uint32_t SERVO_MIN_DUTY = 1638;
@@ -54,6 +52,7 @@ unsigned long ultimaProxMs      = 0;
 unsigned long ultimoDhtMs       = 0;
 unsigned long ultimoOledMs      = 0;
 unsigned long lastMqttTry       = 0;
+unsigned long lastEspNowSyncMs  = 0;
 
 String sessionIdAtiva = "";
 String uidOperador    = "";
@@ -88,36 +87,13 @@ void moverServo(uint8_t angulo) {
 }
 
 void enviarSyncEspNow(uint8_t tipo) {
-  PacoteEspNow pkt = {};
-  pkt.versao          = 1;
-  pkt.tipo            = tipo;
-  pkt.ocupacaoSala    = (uint8_t)ocupacaoSala;
-  pkt.portaRackAberta = portaRackAberta ? 1 : 0;
-  pkt.alarmeAtivo     = alarmeRackAtivo ? 1 : 0;
-  pkt.uptimeMs        = millis();
-  strncpy(pkt.uidAtivo, uidOperador.c_str(), sizeof(pkt.uidAtivo) - 1);
-  strncpy(pkt.sessionId, sessionIdAtiva.c_str(), sizeof(pkt.sessionId) - 1);
-  esp_now_send(PEER_MAC, reinterpret_cast<const uint8_t*>(&pkt), sizeof(pkt));
-}
-
-void onEspNowRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
-  (void)info;
-  if (len != sizeof(PacoteEspNow)) return;
-  PacoteEspNow pkt;
-  memcpy(&pkt, data, sizeof(pkt));
-
-  ocupacaoSala = pkt.ocupacaoSala;
-  if (pkt.sessionId[0] != '\0') {
-    sessionIdAtiva = String(pkt.sessionId);
-  }
-  if (pkt.uidAtivo[0] != '\0') {
-    uidOperador = String(pkt.uidAtivo);
-  }
-
-  // Se operador saiu da sala e a porta do rack ainda está aberta, dispara alarme imediato
-  if (pkt.tipo == ESPNOW_SALA_SAIDA && portaRackAberta) {
-    alarmeRackAtivo = true;
-  }
+  espNowLink.sendPacket(
+      tipo,
+      (uint8_t)ocupacaoSala,
+      portaRackAberta,
+      alarmeRackAtivo,
+      uidOperador,
+      sessionIdAtiva);
 }
 
 void publicarEvento(const char* topic, const char* stage, const char* eventType,
@@ -129,9 +105,65 @@ void publicarEvento(const char* topic, const char* stage, const char* eventType,
   mqttClient.publish(topic, json.c_str(), false);
 }
 
+void processarMensagensEspNow() {
+  PacoteEspNow pkt;
+  if (espNowLink.consumeReceived(pkt)) {
+    ocupacaoSala = pkt.ocupacaoSala;
+
+    char uidSafe[18] = {0};
+    memcpy(uidSafe, pkt.uidAtivo, 16);
+    if (uidSafe[0] != '\0') {
+      uidOperador = String(uidSafe);
+    }
+
+    char sessSafe[34] = {0};
+    memcpy(sessSafe, pkt.sessionId, 32);
+    if (sessSafe[0] != '\0') {
+      sessionIdAtiva = String(sessSafe);
+    }
+
+    if (pkt.tipo == ESPNOW_SALA_ACESSO) {
+      Serial.println("[RACK][ESPNOW_RX] Entrada na sala recebida | Sessao=" + sessionIdAtiva);
+    } else if (pkt.tipo == ESPNOW_SALA_PANICO) {
+      alarmeRackAtivo = true;
+      Serial.println("[RACK][ESPNOW_RX] Alerta de PANICO recebido do porta_controller!");
+    } else if (pkt.tipo == ESPNOW_SALA_SAIDA) {
+      if (portaRackAberta) {
+        alarmeRackAtivo = true;
+        Serial.println("[RACK][ESPNOW_RX] ALARME CRITICO: saida da sala com porta do rack ABERTA!");
+
+        JsonDocument data;
+        data["rack_door_open"]  = true;
+        data["alarm_door_open"] = true;
+        data["state"]           = "ABERTA_NA_SAIDA";
+        publicarEvento(MqttTopics::RACK_PORTA_ESTADO, "3_saida_e_reset",
+                       "RACK_DOOR_LEFT_OPEN_ON_EXIT", "CRIT", data);
+        enviarSyncEspNow(ESPNOW_RACK_EVENTO);
+      } else {
+        sessionIdAtiva = "";
+        uidOperador    = "";
+        Serial.println("[RACK][ESPNOW_RX] Saida da sala concluida com rack fechado.");
+      }
+    }
+  }
+
+  if (espNowLink.consumeSendError()) {
+    Serial.println("[RACK][ESPNOW_TX] Falha no envio ao porta_controller.");
+  }
+
+  if (millis() - lastEspNowSyncMs >= EspNowConfig::SYNC_HEARTBEAT_MS) {
+    lastEspNowSyncMs = millis();
+    enviarSyncEspNow(ESPNOW_SYNC_ESTADO);
+  }
+}
+
 void garantirConexao() {
   if (WiFi.status() != WL_CONNECTED) {
-    WiFi.begin(SECRET_WIFI_SSID, SECRET_WIFI_PASSWORD);
+    static unsigned long lastWifiTry = 0;
+    if (millis() - lastWifiTry >= 5000UL || lastWifiTry == 0) {
+      lastWifiTry = millis();
+      WiFi.begin(SECRET_WIFI_SSID, SECRET_WIFI_PASSWORD);
+    }
     return;
   }
   if (!mqttClient.connected() && (millis() - lastMqttTry >= Timings::MQTT_RETRY_MS)) {
@@ -171,6 +203,7 @@ void tratarNfcRack() {
   data["decision"]   = "PERMITIDO";
   publicarEvento(MqttTopics::RACK_NFC_EVENTO, "2_ocupacao_e_rack",
                  "RACK_ACCESS_EVALUATED", "INFO", data);
+  enviarSyncEspNow(ESPNOW_RACK_EVENTO);
   Serial.println("[RACK] 2o fator NFC autorizado UID=" + uid);
 }
 
@@ -252,11 +285,18 @@ void tratarAmbienteEOled() {
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
   display.setCursor(0, 0);
-  display.println(F("Elo5 RackController"));
+  display.print(F("Elo5 Rack  Link:"));
+  display.println(espNowLink.isPeerConnected() ? F("OK") : F("--"));
+
+  display.print(F("Sala Ocup: "));
+  display.println(ocupacaoSala);
+
   display.print(F("Porta: "));
   display.println(portaRackAberta ? F("ABERTA") : F("FECHADA"));
+
   display.print(F("Alarme: "));
   display.println(alarmeRackAtivo ? F("CRITICO") : F("NORMAL"));
+
   display.print(F("Dist: "));
   if (ultimaDistCm > 0) {
     display.print(ultimaDistCm, 1);
@@ -264,6 +304,7 @@ void tratarAmbienteEOled() {
   } else {
     display.println(F("--"));
   }
+
   display.print(F("T:"));
   display.print(isnan(ultimaTempC) ? 0.0f : ultimaTempC, 1);
   display.print(F("C U:"));
@@ -296,15 +337,7 @@ void setupRackController() {
   SPI.begin(Pins::RFID_SCK, Pins::RFID_MISO, Pins::RFID_MOSI, Pins::RFID_SS);
   rfid.PCD_Init();
 
-  WiFi.mode(WIFI_STA);
-  if (esp_now_init() == ESP_OK) {
-    esp_now_register_recv_cb(onEspNowRecv);
-    esp_now_peer_info_t peer = {};
-    memcpy(peer.peer_addr, PEER_MAC, 6);
-    peer.channel = 0;
-    peer.encrypt = false;
-    esp_now_add_peer(&peer);
-  }
+  espNowLink.begin(EspNowConfig::MAC_PORTA_CONTROLLER);
 
   tlsClient.setCACert(SECRET_CA_CERT_PEM);
   tlsClient.setCertificate(SECRET_CLIENT_CERT_PEM);
@@ -317,11 +350,12 @@ void setupRackController() {
   mqttClient.setBufferSize(1024);
 
   portaRackAnterior = (digitalRead(Pins::PORTA_RACK_SW) == HIGH);
-  Serial.println("[BOOT] rack-controller pronto.");
+  Serial.println("[BOOT] rack-controller pronto (ESP-NOW + MQTT mTLS).");
 }
 
 void loopRackController() {
   garantirConexao();
+  processarMensagensEspNow();
   tratarNfcRack();
   tratarPortaRack();
   tratarProximidade();

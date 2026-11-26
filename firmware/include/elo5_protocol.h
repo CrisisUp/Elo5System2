@@ -1,12 +1,15 @@
 /**
  * @file elo5_protocol.h
- * @brief Contrato de eventos JSON (Elo5api) e sincronização ESP-NOW entre nós.
+ * @brief Contrato de eventos JSON (Elo5api) e sincronização bidirecional ESP-NOW.
  */
 
 #pragma once
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <esp_now.h>
+#include <esp_wifi.h>
+#include <WiFi.h>
 #include "node_config.h"
 
 // =========================================================================
@@ -15,8 +18,9 @@
 enum TipoMsgEspNow : uint8_t {
   ESPNOW_SALA_ACESSO   = 1,
   ESPNOW_SALA_SAIDA    = 2,
-  ESPNOW_RACK_EVENTO   = 3,
-  ESPNOW_SYNC_ESTADO   = 4
+  ESPNOW_SALA_PANICO   = 3,
+  ESPNOW_RACK_EVENTO   = 4,
+  ESPNOW_SYNC_ESTADO   = 5
 };
 
 struct __attribute__((packed)) PacoteEspNow {
@@ -25,13 +29,127 @@ struct __attribute__((packed)) PacoteEspNow {
   uint8_t  ocupacaoSala;
   uint8_t  portaRackAberta;
   uint8_t  alarmeAtivo;
+  uint8_t  canalWifi;
+  uint32_t seq;
   uint32_t uptimeMs;
   char     uidAtivo[17];
   char     sessionId[33];
 };
 
 // =========================================================================
-// 2. CONSTRUTOR DE ENVELOPE JSON COMPATÍVEL COM ELO5API (/api/v1/events/ingest)
+// 2. GERENCIADOR ESP-NOW THREAD-SAFE (SEM ALOCAÇÃO DINÂMICA NA CALLBACK)
+// =========================================================================
+class Elo5EspNowLink {
+  public:
+    bool begin(const uint8_t peerMac[6]) {
+      memcpy(_peerMac, peerMac, 6);
+      WiFi.mode(WIFI_STA);
+      esp_wifi_set_channel(EspNowConfig::DEFAULT_CHANNEL, WIFI_SECOND_CHAN_NONE);
+
+      Serial.print("[ESPNOW] MAC STA local: ");
+      Serial.println(WiFi.macAddress());
+
+      if (esp_now_init() != ESP_OK) {
+        Serial.println("[ESPNOW] Falha ao inicializar esp_now_init().");
+        _ativo = false;
+        return false;
+      }
+
+      _instance = this;
+      esp_now_register_recv_cb(_onRecvStatic);
+      esp_now_register_send_cb(_onSentStatic);
+
+      esp_now_peer_info_t peer = {};
+      memcpy(peer.peer_addr, _peerMac, 6);
+      peer.channel = 0; // Usa dinamicamente o canal ativo do rádio Wi-Fi STA
+      peer.encrypt = false;
+
+      if (esp_now_add_peer(&peer) != ESP_OK) {
+        Serial.println("[ESPNOW] Falha ao adicionar peer.");
+        _ativo = false;
+        return false;
+      }
+
+      _ativo = true;
+      Serial.println("[ESPNOW] Link ESP-NOW inicializado com sucesso.");
+      return true;
+    }
+
+    bool sendPacket(uint8_t tipo, uint8_t ocupacaoSala, bool portaRackAberta,
+                    bool alarmeAtivo, const String& uidAtivo, const String& sessionId) {
+      if (!_ativo) return false;
+
+      PacoteEspNow pkt = {};
+      pkt.versao          = 1;
+      pkt.tipo            = tipo;
+      pkt.ocupacaoSala    = ocupacaoSala;
+      pkt.portaRackAberta = portaRackAberta ? 1 : 0;
+      pkt.alarmeAtivo     = alarmeAtivo ? 1 : 0;
+      pkt.canalWifi       = (uint8_t)WiFi.channel();
+      pkt.seq             = ++_txSeq;
+      pkt.uptimeMs        = millis();
+
+      strncpy(pkt.uidAtivo, uidAtivo.c_str(), sizeof(pkt.uidAtivo) - 1);
+      pkt.uidAtivo[sizeof(pkt.uidAtivo) - 1] = '\0';
+
+      strncpy(pkt.sessionId, sessionId.c_str(), sizeof(pkt.sessionId) - 1);
+      pkt.sessionId[sizeof(pkt.sessionId) - 1] = '\0';
+
+      esp_err_t res = esp_now_send(_peerMac, reinterpret_cast<const uint8_t*>(&pkt), sizeof(pkt));
+      return (res == ESP_OK);
+    }
+
+    bool consumeReceived(PacoteEspNow& outPkt) {
+      if (!_hasRx) return false;
+      noInterrupts();
+      memcpy(&outPkt, const_cast<const PacoteEspNow*>(&_rxPkt), sizeof(PacoteEspNow));
+      _hasRx = false;
+      interrupts();
+      return true;
+    }
+
+    bool consumeSendError() {
+      if (!_sendFailed) return false;
+      _sendFailed = false;
+      return true;
+    }
+
+    bool isPeerConnected(unsigned long maxAgeMs = 10000UL) const {
+      return (_lastRxMs > 0) && ((millis() - _lastRxMs) <= maxAgeMs);
+    }
+
+  private:
+    static Elo5EspNowLink* _instance;
+    uint8_t       _peerMac[6]  = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    bool          _ativo       = false;
+    uint32_t      _txSeq       = 0;
+    volatile bool _hasRx       = false;
+    volatile bool _sendFailed  = false;
+    unsigned long _lastRxMs    = 0;
+    PacoteEspNow  _rxPkt       = {};
+
+    static void _onRecvStatic(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
+      (void)info;
+      if (_instance == nullptr || len != sizeof(PacoteEspNow)) return;
+      const PacoteEspNow* incoming = reinterpret_cast<const PacoteEspNow*>(data);
+      if (incoming->versao != 1) return;
+      memcpy(&_instance->_rxPkt, incoming, sizeof(PacoteEspNow));
+      _instance->_lastRxMs = millis();
+      _instance->_hasRx    = true;
+    }
+
+    static void _onSentStatic(const uint8_t* mac_addr, esp_now_send_status_t status) {
+      (void)mac_addr;
+      if (_instance != nullptr && status != ESP_NOW_SEND_SUCCESS) {
+        _instance->_sendFailed = true;
+      }
+    }
+};
+
+inline Elo5EspNowLink* Elo5EspNowLink::_instance = nullptr;
+
+// =========================================================================
+// 3. CONSTRUTOR DE ENVELOPE JSON COMPATÍVEL COM ELO5API (/api/v1/events/ingest)
 // =========================================================================
 inline String buildElo5EventJson(
     const String& eventId,

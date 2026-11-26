@@ -1,6 +1,6 @@
 /**
  * @file porta_controller.cpp
- * @brief Controlador da Sala CPD (NODE_PORTA): NFC entrada, PIR, saída por botão e pânico.
+ * @brief Controlador da Sala CPD (NODE_PORTA): NFC entrada, PIR, saída por botão, pânico e ESP-NOW.
  */
 
 #if defined(NODE_PORTA)
@@ -11,8 +11,6 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
-#include <esp_now.h>
-#include <esp_wifi.h>
 #include <time.h>
 
 #include "node_config.h"
@@ -28,17 +26,19 @@ namespace {
 MFRC522 rfid(Pins::RFID_SS, Pins::RFID_RST);
 WiFiClientSecure tlsClient;
 PubSubClient mqttClient(tlsClient);
+Elo5EspNowLink espNowLink;
 
-uint8_t PEER_MAC[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 volatile bool flagPanicoISR = false;
 
-int    ocupacaoSala       = 0;
-bool   pirAnterior        = false;
-bool   botaoAnterior      = HIGH;
-bool   alarmeRemotoRack   = false;
-uint32_t seqEvento        = 0;
-unsigned long bootMs      = 0;
-unsigned long lastMqttTry = 0;
+int           ocupacaoSala       = 0;
+bool          pirAnterior        = false;
+bool          botaoAnterior      = HIGH;
+bool          portaRackRemota    = false;
+bool          alarmeRemotoRack   = false;
+uint32_t      seqEvento          = 0;
+unsigned long bootMs             = 0;
+unsigned long lastMqttTry        = 0;
+unsigned long lastEspNowSyncMs   = 0;
 
 String sessionIdAtiva = "";
 String uidAtivoSala   = "";
@@ -71,24 +71,36 @@ void setLedRgb(uint8_t r, uint8_t g, uint8_t b) {
 }
 
 void enviarSyncEspNow(uint8_t tipo) {
-  PacoteEspNow pkt = {};
-  pkt.versao          = 1;
-  pkt.tipo            = tipo;
-  pkt.ocupacaoSala    = (uint8_t)ocupacaoSala;
-  pkt.portaRackAberta = 0;
-  pkt.alarmeAtivo     = alarmeRemotoRack ? 1 : 0;
-  pkt.uptimeMs        = millis();
-  strncpy(pkt.uidAtivo, uidAtivoSala.c_str(), sizeof(pkt.uidAtivo) - 1);
-  strncpy(pkt.sessionId, sessionIdAtiva.c_str(), sizeof(pkt.sessionId) - 1);
-  esp_now_send(PEER_MAC, reinterpret_cast<const uint8_t*>(&pkt), sizeof(pkt));
+  espNowLink.sendPacket(
+      tipo,
+      (uint8_t)ocupacaoSala,
+      portaRackRemota,
+      alarmeRemotoRack,
+      uidAtivoSala,
+      sessionIdAtiva);
 }
 
-void onEspNowRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
-  (void)info;
-  if (len == sizeof(PacoteEspNow)) {
-    PacoteEspNow pkt;
-    memcpy(&pkt, data, sizeof(pkt));
+void processarMensagensEspNow() {
+  PacoteEspNow pkt;
+  if (espNowLink.consumeReceived(pkt)) {
+    portaRackRemota  = (pkt.portaRackAberta != 0);
     alarmeRemotoRack = (pkt.alarmeAtivo != 0);
+
+    if (pkt.tipo == ESPNOW_RACK_EVENTO) {
+      Serial.print("[PORTA][ESPNOW_RX] Rack evento | portaAberta=");
+      Serial.print(portaRackRemota ? "SIM" : "NAO");
+      Serial.print(" | alarme=");
+      Serial.println(alarmeRemotoRack ? "ATIVO" : "NORMAL");
+    }
+  }
+
+  if (espNowLink.consumeSendError()) {
+    Serial.println("[PORTA][ESPNOW_TX] Falha no envio ao rack-controller.");
+  }
+
+  if (millis() - lastEspNowSyncMs >= EspNowConfig::SYNC_HEARTBEAT_MS) {
+    lastEspNowSyncMs = millis();
+    enviarSyncEspNow(ESPNOW_SYNC_ESTADO);
   }
 }
 
@@ -104,7 +116,11 @@ void publicarEvento(const char* topic, const char* stage, const char* eventType,
 
 void garantirConexao() {
   if (WiFi.status() != WL_CONNECTED) {
-    WiFi.begin(SECRET_WIFI_SSID, SECRET_WIFI_PASSWORD);
+    static unsigned long lastWifiTry = 0;
+    if (millis() - lastWifiTry >= 5000UL || lastWifiTry == 0) {
+      lastWifiTry = millis();
+      WiFi.begin(SECRET_WIFI_SSID, SECRET_WIFI_PASSWORD);
+    }
     return;
   }
   if (!mqttClient.connected() && (millis() - lastMqttTry >= Timings::MQTT_RETRY_MS)) {
@@ -148,7 +164,7 @@ void tratarLeituraNfcSala() {
                  "NFC_ACCESS_EVALUATED", "INFO", "uid_nfc", uid, data);
 
   enviarSyncEspNow(ESPNOW_SALA_ACESSO);
-  Serial.println("[PORTA] Acesso sala registrado UID=" + uid);
+  Serial.println("[PORTA] Acesso sala registrado e enviado via ESP-NOW | UID=" + uid);
 }
 
 void tratarPirSala() {
@@ -174,8 +190,10 @@ void tratarBotaoSaida() {
 
       JsonDocument dataExit;
       dataExit["exit_button_pressed"] = true;
+      dataExit["rack_door_open"]      = portaRackRemota;
       publicarEvento(MqttTopics::SALA_SAIDA_BOTAO, "3_saida_e_reset",
-                     "EXIT_BUTTON_PRESSED", "INFO", "uid_nfc_saindo", uidSaindo, dataExit);
+                     "EXIT_BUTTON_PRESSED", portaRackRemota ? "ALERT" : "INFO",
+                     "uid_nfc_saindo", uidSaindo, dataExit);
 
       JsonDocument dataReset;
       dataReset["pir_motion"]           = false;
@@ -186,7 +204,7 @@ void tratarBotaoSaida() {
       enviarSyncEspNow(ESPNOW_SALA_SAIDA);
       uidAtivoSala   = "";
       sessionIdAtiva = "";
-      Serial.println("[PORTA] Saida registrada e sessao encerrada.");
+      Serial.println("[PORTA] Saida registrada e notificada ao rack-controller via ESP-NOW.");
     }
   }
   botaoAnterior = estadoAtual;
@@ -215,15 +233,7 @@ void setupPortaController() {
   SPI.begin(Pins::RFID_SCK, Pins::RFID_MISO, Pins::RFID_MOSI, Pins::RFID_SS);
   rfid.PCD_Init();
 
-  WiFi.mode(WIFI_STA);
-  if (esp_now_init() == ESP_OK) {
-    esp_now_register_recv_cb(onEspNowRecv);
-    esp_now_peer_info_t peer = {};
-    memcpy(peer.peer_addr, PEER_MAC, 6);
-    peer.channel = 0;
-    peer.encrypt = false;
-    esp_now_add_peer(&peer);
-  }
+  espNowLink.begin(EspNowConfig::MAC_RACK_CONTROLLER);
 
   tlsClient.setCACert(SECRET_CA_CERT_PEM);
   tlsClient.setCertificate(SECRET_CLIENT_CERT_PEM);
@@ -235,29 +245,36 @@ void setupPortaController() {
   mqttClient.setServer(SECRET_MQTT_BROKER, SECRET_MQTT_PORT);
   mqttClient.setBufferSize(1024);
 
-  Serial.println("[BOOT] porta_controller pronto.");
+  Serial.println("[BOOT] porta_controller pronto (ESP-NOW + MQTT mTLS).");
 }
 
 void loopPortaController() {
   garantirConexao();
+  processarMensagensEspNow();
   tratarLeituraNfcSala();
   tratarPirSala();
   tratarBotaoSaida();
 
   if (flagPanicoISR) {
     flagPanicoISR = false;
+    alarmeRemotoRack = true;
     setLedRgb(255, 0, 0);
     tone(Pins::BUZZER, 2200, 1000);
+    enviarSyncEspNow(ESPNOW_SALA_PANICO);
+
     JsonDocument data;
     data["panic_button"] = true;
     publicarEvento(MqttTopics::SALA_SAIDA_BOTAO, "3_saida_e_reset",
                    "PANIC_BUTTON_TRIGGERED", "CRIT", "uid_nfc", uidAtivoSala, data);
   } else if (alarmeRemotoRack) {
     setLedRgb(255, 0, 0);
+    tone(Pins::BUZZER, ((millis() / 300) % 2 == 0) ? 2000 : 0);
   } else if (ocupacaoSala > 0) {
     setLedRgb(0, 180, 180);
+    noTone(Pins::BUZZER);
   } else {
     setLedRgb(0, 120, 0);
+    noTone(Pins::BUZZER);
   }
 }
 
