@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "author": "Elo5System",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-devkit-v1",
+      "id": "esp32",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "nfcRoomBtn",
+      "top": -150,
+      "left": -240,
+      "attrs": {
+        "color": "blue",
+        "label": "NFC SALA"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "nfcRackBtn",
+      "top": -150,
+      "left": 60,
+      "attrs": {
+        "color": "green",
+        "label": "NFC RACK"
+      }
+    },
+    {
+      "type": "wokwi-hc-sr04",
+      "id": "ultrasonic",
+      "top": -150,
+      "left": 240,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-pir-motion-sensor",
+      "id": "pir",
+      "top": 30,
+      "left": -250,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "exitBtn",
+      "top": 220,
+      "left": -230,
+      "attrs": {
+        "color": "red",
+        "label": "SAIDA"
+      }
+    },
+    {
+      "type": "wokwi-slide-switch",
+      "id": "reedDoor",
+      "top": 210,
+      "left": 240,
+      "attrs": {
+        "value": "0"
+      }
+    },
+    {
+      "type": "wokwi-buzzer",
+      "id": "buzzer",
+      "top": -150,
+      "left": -80,
+      "attrs": {
+        "volume": "0.5"
+      }
+    }
+  ],
+  "connections": [
+    ["esp32:TX0", "$serialMonitor:RX", "", []],
+    ["esp32:RX0", "$serialMonitor:TX", "", []],
+
+    ["nfcRoomBtn:1.l", "esp32:D32", "blue", ["h40"]],
+    ["nfcRoomBtn:2.l", "esp32:GND.1", "black", ["h40", "v120"]],
+
+    ["nfcRackBtn:1.l", "esp32:D33", "green", ["h-20", "v120"]],
+    ["nfcRackBtn:2.l", "esp32:GND.1", "black", ["h-30", "v130"]],
+
+    ["ultrasonic:VCC", "esp32:VIN", "red", ["v20", "h-140"]],
+    ["ultrasonic:GND", "esp32:GND.1", "black", ["v30", "h-170"]],
+    ["ultrasonic:TRIG", "esp32:D5", "yellow", ["v40", "h-110"]],
+    ["ultrasonic:ECHO", "esp32:D34", "green", ["v50", "h-80"]],
+
+    ["pir:VCC", "esp32:VIN", "red", ["v-10", "h130"]],
+    ["pir:GND", "esp32:GND.1", "black", ["v10", "h120"]],
+    ["pir:OUT", "esp32:D27", "blue", ["v20", "h140"]],
+
+    ["exitBtn:1.l", "esp32:D25", "orange", ["h40"]],
+    ["exitBtn:2.l", "esp32:GND.1", "black", ["h40", "v-80"]],
+
+    ["reedDoor:1", "esp32:D26", "cyan", ["v-20", "h-110"]],
+    ["reedDoor:2", "esp32:GND.1", "black", ["v-10", "h-130"]],
+
+    ["buzzer:1", "esp32:D14", "purple", ["v30", "h40"]],
+    ["buzzer:2", "esp32:GND.1", "black", ["v40", "h20"]]
+  ],
+  "dependencies": {}
+}

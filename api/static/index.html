@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Elo5System — NOC &amp; Telemetria CPD</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-badge">E5</div>
+      <div>
+        <h1>Elo5System <span class="subtitle">NOC &amp; Segurança Física CPD</span></h1>
+        <p class="meta-line">Monitoramento em tempo real · Sala CPD &amp; Rack 01</p>
+      </div>
+    </div>
+
+    <div class="topbar-controls">
+      <div id="mqtt-pill" class="status-pill pill-neutral">
+        <span class="dot"></span>
+        <span id="mqtt-status-text">Conectando...</span>
+      </div>
+      <div id="tls-pill" class="status-pill pill-neutral">TLS/mTLS: --</div>
+      <label class="polling-toggle" for="auto-refresh-toggle">
+        <input type="checkbox" id="auto-refresh-toggle" checked />
+        <span>Auto-sync (2s)</span>
+      </label>
+      <button type="button" id="btn-refresh" class="btn btn-secondary">Atualizar</button>
+    </div>
+  </header>
+
+  <section id="alarm-banner" class="alarm-banner hidden" role="alert">
+    <div class="alarm-content">
+      <strong>ALERTA CRÍTICO DE SEGURANÇA:</strong>
+      <span>Saída da sala acionada com a porta do <code>rack_01</code> ainda ABERTA! Feche a porta para normalizar.</span>
+    </div>
+  </section>
+
+  <main class="container">
+    <!-- KPIs / Cartões Principais -->
+    <section class="grid-cards">
+      <article class="card">
+        <div class="card-header">
+          <h2>Sala CPD (<code>sala_cpd</code>)</h2>
+          <span id="room-occupancy-badge" class="badge badge-neutral">Vazia</span>
+        </div>
+        <div class="kpi-row">
+          <div class="kpi">
+            <span class="kpi-label">Ocupação Atual</span>
+            <span id="room-occupancy" class="kpi-value">0</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-label">Sensor PIR</span>
+            <span id="room-pir" class="kpi-value-sm">Sem movimento</span>
+          </div>
+        </div>
+        <dl class="kv-list">
+          <div>
+            <dt>Sessão Ativa</dt>
+            <dd id="room-session" class="mono">--</dd>
+          </div>
+          <div>
+            <dt>Último UID Sala</dt>
+            <dd id="room-uid" class="mono">--</dd>
+          </div>
+          <div>
+            <dt>Atualizado em</dt>
+            <dd id="room-updated" class="mono">--</dd>
+          </div>
+        </dl>
+      </article>
+
+      <article class="card" id="rack-card">
+        <div class="card-header">
+          <h2>Rack Principal (<code>rack_01</code>)</h2>
+          <span id="rack-door-badge" class="badge badge-ok">Porta Fechada</span>
+        </div>
+        <div class="kpi-row">
+          <div class="kpi">
+            <span class="kpi-label">Proximidade HC-SR04</span>
+            <span id="rack-distance" class="kpi-value">-- <small>cm</small></span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-label">Alarme de Porta</span>
+            <span id="rack-alarm" class="kpi-value-sm">Normal</span>
+          </div>
+        </div>
+        <div class="distance-meter" aria-label="Medidor de distância">
+          <div id="distance-bar" class="distance-bar"></div>
+        </div>
+        <dl class="kv-list">
+          <div>
+            <dt>Operador Autorizado</dt>
+            <dd id="rack-operator" class="mono">--</dd>
+          </div>
+          <div>
+            <dt>Atualizado em</dt>
+            <dd id="rack-updated" class="mono">--</dd>
+          </div>
+        </dl>
+      </article>
+
+      <article class="card">
+        <div class="card-header">
+          <h2>Simulador &amp; Segurança API</h2>
+          <span id="auth-badge" class="badge badge-neutral">API Key: --</span>
+        </div>
+        <div class="sim-panel">
+          <div class="field-group">
+            <label for="api-key-input">X-API-Key (para escrita/simulação)</label>
+            <input type="password" id="api-key-input" placeholder="Opcional se API_ADMIN_KEY vazia" autocomplete="off" />
+          </div>
+          <div class="field-group">
+            <label for="sim-uid-input">UID NFC Operador</label>
+            <input type="text" id="sim-uid-input" value="04A1B2C3D4" maxlength="32" class="mono" />
+          </div>
+          <div class="sim-buttons">
+            <button type="button" data-action="enter_room" class="btn btn-primary">1. Entrar Sala</button>
+            <button type="button" data-action="pir_motion" class="btn btn-secondary">2. PIR Ativo</button>
+            <button type="button" data-action="open_rack" class="btn btn-warn">3. Abrir Rack</button>
+            <button type="button" data-action="prox_read" class="btn btn-secondary">4. Ler 32.5 cm</button>
+            <button type="button" data-action="exit_open" class="btn btn-danger">5. Sair (Porta Aberta)</button>
+            <button type="button" data-action="close_reset" class="btn btn-ok">6. Fechar &amp; Reset</button>
+          </div>
+          <p id="action-feedback" class="feedback-msg" aria-live="polite"></p>
+        </div>
+      </article>
+    </section>
+
+    <!-- Gestão de Credenciais NFC e Auditoria de Logs -->
+    <section class="grid-bottom">
+      <article class="card">
+        <div class="card-header">
+          <h2>Credenciais NFC</h2>
+          <span id="cred-count" class="badge badge-neutral">0</span>
+        </div>
+        <form id="cred-form" class="cred-form">
+          <input type="text" id="cred-uid" placeholder="UID (ex: 04A1B2C3D4)" required maxlength="32" class="mono" />
+          <input type="text" id="cred-owner" placeholder="Nome do Operador" required maxlength="80" />
+          <div class="checkbox-row">
+            <label><input type="checkbox" id="cred-room" checked /> Sala CPD</label>
+            <label><input type="checkbox" id="cred-rack" /> Rack 01</label>
+            <label><input type="checkbox" id="cred-active" checked /> Ativa</label>
+          </div>
+          <button type="submit" class="btn btn-primary">Salvar Credencial</button>
+        </form>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>UID</th>
+                <th>Operador</th>
+                <th>Escopo</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="cred-tbody"></tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-header">
+          <h2>Auditoria de Eventos &amp; Alertas</h2>
+          <div class="filters">
+            <select id="filter-severity" aria-label="Filtrar por severidade">
+              <option value="">Todas Severidades</option>
+              <option value="INFO">INFO</option>
+              <option value="WARN">WARN</option>
+              <option value="ALERT">ALERT</option>
+            </select>
+            <select id="filter-zone" aria-label="Filtrar por zona">
+              <option value="">Todas Zonas</option>
+              <option value="sala_cpd">sala_cpd</option>
+              <option value="rack_01">rack_01</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap logs-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Horário</th>
+                <th>Sev.</th>
+                <th>Etapa</th>
+                <th>Evento</th>
+                <th>Zona</th>
+                <th>UID / Detalhes</th>
+              </tr>
+            </thead>
+            <tbody id="logs-tbody"></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>
