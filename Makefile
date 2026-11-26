@@ -23,7 +23,7 @@ SIM_UID          ?= 04A1B2C3D4
 SIM_DELAY        ?= 1
 CERT_DAYS        ?= 365
 
-.PHONY: help setup certs pwfile esp32-secrets up down restart logs sim health test-e2e clean-certs
+.PHONY: help setup certs pwfile esp32-secrets up down restart logs sim health test-e2e test-clean down-clean clean-certs
 
 help: ## Exibe os comandos disponíveis no Makefile
 	@echo "Uso: make <alvo> [VAR=valor]"
@@ -78,7 +78,7 @@ pwfile: ## Cria o arquivo de usuários/senhas (pwfile) do Mosquitto via containe
 		       mosquitto_passwd -b /mosquitto/config/pwfile '$(MQTT_API_USER)' '$(MQTT_API_PASSWORD)' && \
 		       mosquitto_passwd -b /mosquitto/config/pwfile '$(MQTT_SIM_USER)' '$(MQTT_SIM_PASSWORD)' && \
 		       mosquitto_passwd -b /mosquitto/config/pwfile '$(MQTT_ESP_USER)' '$(MQTT_ESP_PASS)'"
-	@chmod 644 $(PWFILE)
+	@chmod 600 $(PWFILE)
 	@echo "[OK] Arquivo $(PWFILE) gerado com usuários: $(MQTT_HEALTH_USER), $(MQTT_API_USER), $(MQTT_SIM_USER), $(MQTT_ESP_USER)."
 
 esp32-secrets: ## Injeta ca.crt, esp32.crt, esp32.key e credenciais MQTT em firmware/include/secrets.h
@@ -112,3 +112,12 @@ clean-certs: ## Remove certificados e pwfile gerados localmente
 
 test-e2e: ## Executa a suite completa de validacao ponta a ponta (8 etapas)
 	./scripts/test_e2e.sh
+
+test-clean: ## Remove containers antigos em conflito e executa o teste E2E completo
+	docker rm -f elo5-api elo5-mosquitto elo5-sim >/dev/null 2>&1 || true
+	./scripts/test_e2e.sh
+
+down-clean: ## Derruba containers, redes e volumes do Elo5System sem conflitos
+	docker compose down -v --remove-orphans >/dev/null 2>&1 || true
+	docker rm -f elo5-api elo5-mosquitto elo5-sim >/dev/null 2>&1 || true
+	@echo "[OK] Stack Elo5System removida com limpeza de volumes e orfaos."
