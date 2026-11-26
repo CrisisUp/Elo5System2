@@ -136,6 +136,13 @@
       "left": -674,
       "rotate": 180,
       "attrs": {}
+    },
+    {
+      "type": "wokwi-relay-module",
+      "id": "relay1",
+      "top": 260,
+      "left": -180,
+      "attrs": {}
     }
   ],
   "connections": [
@@ -664,6 +671,30 @@
       "bb2:tn.23",
       "black",
       []
+    ],
+    [
+      "relay1:VCC",
+      "esp1:5V",
+      "red",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "relay1:GND",
+      "esp1:GND.1",
+      "black",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "relay1:IN",
+      "esp1:19",
+      "orange",
+      [
+        "h0"
+      ]
     ]
   ],
   "dependencies": {}

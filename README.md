@@ -22,3 +22,20 @@ make lint-wokwi
 
 # Subir toda a stack Docker (Mosquitto mTLS, FastAPI, PostgreSQL, InfluxDB e Grafana)
 make up
+
+
+---
+
+## Arquitetura de Hardware — Nível Produção / CPD Crítico (Dois Nós ESP32)
+
+### 1. Pareamento Unicast ESP-NOW (`elo5_protocol.h` + `node_config.h`)
+* No boot, cada placa imprime `[ESPNOW][MAC_STA] Local: XX:XX:XX:XX:XX:XX`.
+* Preencher `MAC_RACK_CONTROLLER` e `MAC_PORTA_CONTROLLER` em `firmware/include/node_config.h` ativa **Unicast Estrito** (ACK na camada MAC, rejeição de quadros de MACs não pareados e filtro **anti-replay** por sequência monotônica `seq`).
+
+### 2. Circuito de Supervisão EOL (`NODE_RACK` — `GPIO 34` / `ADC1`)
+* **`3V3`** $\rightarrow$ Resistor `R1` (`10 kΩ`) $\rightarrow$ **Nó `GPIO 34` (`ADC1`)**.
+* **Nó `GPIO 34`** $\rightarrow$ Cabo do Reed Switch + Resistor `R2` (`10 kΩ`) no fim de linha $\rightarrow$ **`GND`**, com resistor local `R3` (`100 kΩ`) para `GND`.
+* **Leitura:** `~1,65 V` (`350..3100`) = porta fechada | `~3,30 V` (`> 3100`) = porta aberta | `~0,00 V` (`< 350`) = **alarme crítico `TAMPER_WIRE_CUT`**.
+
+### 3. Acionamento da Fechadura Industrial (`NODE_RACK` — `GPIO 19`)
+* **`GPIO 19` (`esp1:19`)** $\rightarrow$ `IN` do módulo relé optoacoplado (`5 V` / `GND`), comutando fonte externa `12 V DC` (`COM` / `NO`) em regime **Fail-Secure**.
