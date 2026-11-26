@@ -23,7 +23,7 @@ SIM_UID          ?= 04A1B2C3D4
 SIM_DELAY        ?= 1
 CERT_DAYS        ?= 365
 
-.PHONY: help setup certs pwfile esp32-secrets up down restart logs sim health clean-certs
+.PHONY: help setup certs pwfile esp32-secrets up down restart logs sim health test-e2e clean-certs
 
 help: ## Exibe os comandos disponíveis no Makefile
 	@echo "Uso: make <alvo> [VAR=valor]"
@@ -109,3 +109,6 @@ health: ## Verifica status de saúde da Elo5api e últimos estados gravados
 clean-certs: ## Remove certificados e pwfile gerados localmente
 	rm -rf $(CERTS_DIR) $(PWFILE)
 	@echo "[OK] Certificados e pwfile removidos."
+
+test-e2e: ## Executa a suite completa de validacao ponta a ponta (8 etapas)
+	./scripts/test_e2e.sh

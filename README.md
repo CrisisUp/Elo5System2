@@ -1,136 +1,121 @@
-# Roteiro Lógico e Boas Práticas — Elo5System
+# Elo5System v4 — Controle de Acesso, Telemetria e Segurança Física de CPD & Rack
 
-## Roteiro Lógico de Trabalho
-
-### 1. Regra de Ouro da Estrutura (Onde Rodar Comandos)
-
-* **Comandos do Git (`status`, `pull`, `merge`, `push`):** sempre na **raiz** do repositório (`...\Elo5System`).
-* **Comandos do Node (`npm install`, `node server.js`):** sempre dentro da **subpasta específica da aplicação** (ex.: `IOT -  WEB\Elo5api\elo5-v2\elo5-v2`), nunca na raiz — a menos que você queira gerenciar um projeto global lá.
+Plataforma ponta a ponta (**IoT + mTLS + FastAPI + Painel NOC Web**) para monitoramento de acesso, presença e integridade física de salas técnicas (CPD) e racks de servidores, com correlação automática de alarmes críticos (como saída da sala com a porta do rack aberta).
 
 ---
 
-### 2. Ciclo Diário: Antes de Começar a Codar
+## 1. Arquitetura do Sistema
 
-Sempre execute essa sequência na raiz para garantir que seu branch pessoal (`CRISTIANO`) receba o código mais recente da equipe (`devlop` em minúsculo) sem erros de digitação:
+- **Camada Edge / Dispositivos (`firmware/` e `simulator/`):** ESP32 (hardware real ou simulação Wokwi) e simulador Python publicam eventos JSON via **MQTT sobre TLS 1.2+ com autenticação mútua (mTLS)** na porta `8883` usando certificados X.509 assinados por CA própria + usuário/senha.
+- **Broker MQTT (`mosquitto/config/`):** Eclipse Mosquitto 2.0 validando cadeia X.509 (`require_certificate true`), ACLs por usuário/tópico e roteamento em `elo5/#`.
+- **Backend & Painel NOC (`api/`):** Serviço **FastAPI + SQLAlchemy + SQLite** (`Elo5api`) que persiste eventos com idempotência por `event_id`, valida credenciais NFC, correlaciona o estado da porta do rack na saída da sala (`alarm_door_open`) e serve o Painel Web NOC em tempo real (`/`) com headers de segurança (`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy`).
 
-```powershell
-# 1. Vai para o branch compartilhado (use a tecla TAB para autocompletar)
-git checkout devlop
+### Estrutura de Diretórios
 
-# 2. Puxa as novidades da equipe do GitHub
-git pull
+| Caminho | Descrição |
+| :--- | :--- |
+| `api/` | Backend **FastAPI** (`main.py`, `models.py`, `schemas.py`, `database.py`), interface web (`static/`) e testes automatizados (`tests/test_elo5api.py`). |
+| `firmware/` | Firmware **ESP32** (PlatformIO) com ambientes `esp32_hardware_real` e `esp32_wokwi_sim` (NFC/RFID, PIR, ultrassônico HC-SR04 e reed switch). |
+| `mosquitto/config/` | Configuração do broker `mosquitto.conf`, ACLs e diretório local de certificados X.509 (`certs/`, ignorado no Git). |
+| `simulator/` | Simulador Python (`simulate_elo5_flow.py`) que reproduz o ciclo completo de entrada, abertura do rack, proximidade, saída e reset via MQTT mTLS. |
+| `scripts/` | Automação de injeção de segredos do ESP32 (`inject_esp32_secrets.sh`) e suíte de validação ponta a ponta (`test_e2e.sh`). |
 
-# 3. Volta para o seu branch de trabalho
-git checkout CRISTIANO
+---
 
-# 4. Incorpora as novidades do devlop no seu branch
-git merge devlop
-```
+## 2. Pré-requisitos
 
-> Nota: se abrir o VS Code ou o Vim pedindo mensagem de merge, apenas salve e feche o arquivo.
+- **Docker** e **Docker Compose** (OrbStack ou Docker Desktop)
+- **OpenSSL** e **Python 3.11+**
+- **GNU Make** e **curl**
+- **PlatformIO CLI (`pio`)** *(opcional, apenas para compilar/gravar o firmware ESP32)*
 
-### 3. Ciclo de Desenvolvimento: Salvando seu Trabalho
+---
 
-Trabalhe exclusivamente no branch CRISTIANO. Quando terminar uma funcionalidades ou ajuste:
+## 3. Como Executar
 
-```powerShell
-# 1. Confere onde você está e quais arquivos mudou (garante que node_modules não aparece)
-git status
+### Opção A — Modo Automatizado (Recomendado)
 
-# 2. Prepara os arquivos alterados
-git add .
+1. **Provisionar `.env`, CA, certificados mTLS, `pwfile` e `firmware/include/secrets.h`:**
+   ```bash
+   cp -n .env.example .env
+   make setup
+   ```
 
-# 3. Cria o ponto de salvamento com uma mensagem clara
-git commit -m "feat: descrição objetiva do que foi feito"
+2. **Subir os containers (Mosquitto `:8883` + Elo5api `:8000`):**
+   ```bash
+   make up
+   ```
 
-# 4. Envia para a nuvem (seu backup no GitHub)
-git push
-```
+3. **Executar a validação ponta a ponta completa (8 etapas — pytest, Docker, Painel NOC, Simulador mTLS, API REST e PlatformIO):**
+   ```bash
+   make test-e2e
+   ```
 
-### 4. Ciclo de Entrega: Mandando para a Equipe (devlop)
+4. **Disparar uma simulação avulsa de fluxo MQTT mTLS:**
+   ```bash
+   make sim SIM_UID=04A1B2C3D4 SIM_DELAY=0.5
+   ```
 
-Quando sua parte estiver testada e pronta para ser integrada ao projeto principal:
+### Opção B — Modo Manual (Sem `make`)
 
-Garanta que você deu git push no branch CRISTIANO.
+1. **Criar `.env` e gerar a Autoridade Certificadora (CA) e certificados mTLS:**
+   ```bash
+   cp .env.example .env
+   mkdir -p mosquitto/config/certs
+   openssl req -new -x509 -days 365 -nodes -subj "/C=BR/ST=SP/L=SaoPaulo/O=Elo5System/CN=Elo5-Root-CA" \
+     -keyout mosquitto/config/certs/ca.key -out mosquitto/config/certs/ca.crt
+   ```
+   *(Gere também `server.crt` com SAN `DNS:mosquitto,DNS:localhost,IP:127.0.0.1` e os certificados de cliente `api`, `sim`, `client` e `esp32` assinados pela CA, além do arquivo de senhas com `mosquitto_passwd`.)*
 
-Acesse o repositório no GitHub.
+2. **Injetar certificados e credenciais no firmware ESP32:**
+   ```bash
+   bash scripts/inject_esp32_secrets.sh mosquitto/config/certs firmware/include/secrets.h firmware/include/secrets.h.example
+   ```
 
-Abra um Pull Request (PR) configurando:
+3. **Subir a stack Docker e rodar os testes unitários:**
+   ```bash
+   docker compose up -d --build
+   python3 -m venv .venv && source .venv/bin/activate
+   pip install -r api/requirements.txt
+   pytest
+   ```
 
-Base: devlop (destino)
+4. **Compilar o firmware ESP32 manualmente via PlatformIO:**
+   ```bash
+   cd firmware && pio run
+   ```
 
-Compare: CRISTIANO (origem)
+---
 
-### 5. Checklist Rápido de Prevenção
+## 4. Endpoints e Contratos de Comunicação
 
-Escreveu o nome do branch? Digite as 3 primeiras letras (ex.: git checkout dev) e aperte TAB. O terminal completa com as maiúsculas/minúsculas exatas.
+### Interfaces Web & API REST (`http://localhost:8000`)
 
-Vai instalar um pacote (npm install)? Digite pwd (ou olhe o caminho no prompt) para ter certeza de que está na pasta onde fica o package.json daquele módulo, e não na raiz Elo5System.
+| Método | Rota | Descrição |
+| :--- | :--- | :--- |
+| `GET` | `/` | Painel NOC Web em tempo real (telemetria da sala, rack, alertas e logs). |
+| `GET` | `/docs` | Documentação interativa OpenAPI / Swagger. |
+| `GET` | `/api/v1/health` | Status de saúde da API e conexão com o broker MQTT. |
+| `GET` | `/api/v1/state/room` | Estado atual da sala CPD (ocupação, movimento PIR, última sessão). |
+| `GET` | `/api/v1/state/rack` | Estado atual do rack (porta aberta/fechada, proximidade, `alarm_door_open`). |
+| `POST` | `/api/v1/events/ingest` | Ingestão direta de eventos JSON (com deduplicação por `event_id`). |
+| `GET / POST` | `/api/v1/credentials` | Consulta e cadastro de credenciais NFC (`uid_nfc`, permissões de sala/rack). |
 
-Ficou na dúvida do estado atual? Rode git status — ele sempre diz em qual branch você está e o que precisa fazer em seguida.
+### Tópicos MQTT (`elo5/#` na porta `8883` com mTLS)
 
-### Preocupações Essenciais
+| Tópico MQTT | Etapa | Evento (`event_type`) | Função |
+| :--- | :--- | :--- | :--- |
+| `elo5/sala/acesso/nfc/evento` | `1_acesso_sala` | `NFC_ACCESS_EVALUATED` | Valida crachá NFC na entrada da sala CPD. |
+| `elo5/sala/presenca/pir` | `2_ocupacao_e_rack` | `PIR_MOTION_CHANGED` | Detecta presença física interna via sensor PIR. |
+| `elo5/rack/acesso/nfc/evento` | `2_ocupacao_e_rack` | `RACK_ACCESS_EVALUATED` | Valida autenticação NFC de segundo fator no rack. |
+| `elo5/rack/porta/estado` | `2_ocupacao_e_rack` | `RACK_DOOR_CHANGED` | Monitora abertura/fechamento da porta do rack. |
+| `elo5/rack/proximidade/cm` | `2_ocupacao_e_rack` | `RACK_PROXIMITY_MEASURED` | Mede distância em centímetros diante do rack aberto. |
+| `elo5/sala/saida/botao` | `3_saida_e_reset` | `EXIT_BUTTON_PRESSED` / `SESSION_RESET_COMPLETED` | Registra saída, dispara alarme se o rack ficou aberto e encerra a sessão. |
 
-#### 1. Segredos, Senhas e Credenciais (Segurança)
+---
 
-O .gitignore barra arquivos .env, mas não impede alguém de escrever uma senha diretamente dentro de um .js ou .ino (hardcoded).
+## 5. Segurança e Troubleshooting
 
-Risco no projeto: senhas de Wi-Fi no ESP32, credenciais/tokens do broker MQTT, chaves de API e segredos de autenticação (JWT/sessão) no elo5-v2.
-
-O que fazer:
-
-Crie um arquivo .env.example (commitado no Git) apenas com as chaves vazias (MQTT_BROKER=, MQTT_USER=, PORT=3000) para a equipe saber o que configurar.
-
-No firmware do ESP32 (.ino), separe as credenciais em um arquivo secrets.h (já bloqueado pelo .gitignore) e deixe um secrets.example.h no repositório.
-
-#### 2. Reprodutibilidade do Ambiente (Versões e Dependências)
-
-Pelo log do merge, o repositório mistura firmware (Arduino/Wokwi), backend Node.js (Elo5Sys e elo5-v2) e Docker.
-
-O que fazer:
-
-Sempre commite o package-lock.json: ele garante que todos da equipe instalem exatamente a mesma versão das bibliotecas (express, mqtt, cors), evitando o clássico "na minha máquina funciona".
-
-Padronize a versão do Node: adicione um arquivo .nvmrc (ex.: 22) ou o campo "engines": { "node": ">=20.0.0" } no package.json.
-
-Mantenha o libraries.txt atualizado nas pastas do ESP32/Wokwi para que qualquer colega compile o firmware sem ficar caçando biblioteca.
-
-#### 3. Dados Locais e Banco em Arquivo (db.json)
-
-No merge apareceu o arquivo elo5-v2/data/db.json rastreado no Git.
-
-Risco: se cada integrante testar cadastro/login localmente e commitar o db.json alterado, vocês terão conflitos de merge constantes e dados de teste sobrescrevendo os da equipe.
-
-O que fazer: se o db.json for apenas banco local de desenvolvimento, adicione-o ao .gitignore após dar git rm --cached nele, mantendo apenas um db.example.json limpo como modelo inicial.
-
-#### 4. Higiene do Repositório (Pastas de Backup e Nomes com Espaços)
-
-No log apareceram pastas como bk/index_bk2.html, server_BK3.js e caminhos com espaços duplos (IOT -  WEB/NFC - Meio Project/).
-
-O que fazer:
-
-Pare de criar arquivos _bk2, _bk3: o próprio Git já é o histórico de versões. Arquivos duplicados confundem a equipe sobre qual servidor (server.js vs serverbk4.js) realmente está em produção.
-
-Evite espaços e acentos em pastas novas: prefira kebab-case (ex.: iot-web/elo5-api), pois espaços quebram scripts de terminal, Dockerfiles e pipelines CI/CD com facilidade.
-
-#### 5. Proteção de Branches e Fluxo de Merge
-
-Proteja main e devlop no GitHub: configure Branch Protection Rules para exigir Pull Request antes de mesclar na devlop ou main, bloqueando git push --force acidental que apagaria o trabalho dos colegas.
-
-Checklist antes de cada Pull Request:
-
-[ ] Testou o código localmente após dar git merge devlop no seu branch?
-
-[ ] Rodou git status para confirmar que não há arquivos temporários ou senhas?
-
-[ ] Escreveu commits claros (feat:, fix:, docs:, chore:)?
-
-#### 6. Documentação Viva (README.md)
-
-Como o README.md está começando, garanta que ele responda rápido a três perguntas para qualquer pessoa (ou avaliador) que abrir o repositório:
-
-Arquitetura: como o ESP32, o broker MQTT, a API Node.js e o frontend se comunicam.
-
-Como rodar: passo a passo tanto manual (npm install + node server.js) quanto automatizado (docker compose up).
-
-Contratos de comunicação: quais tópicos MQTT (ex.: elo5/acesso, elo5/temperatura) e quais rotas HTTP (POST /login, GET /status) o sistema usa.
+- **Segredos fora do Git:** Arquivos `.env`, `mosquitto/config/certs/*`, `mosquitto/config/pwfile` e `firmware/include/secrets.h` são gerados localmente e bloqueados pelo `.gitignore`.
+- **Conflito de nome de container (`Conflict. The container name "/elo5-api" is already in use`):** Remova containers remanescentes antes de subir novamente com `docker rm -f elo5-api elo5-mosquitto elo5-sim`.
+- **Erro TLS/mTLS após regenerar certificados (`CERTIFICATE_VERIFY_FAILED`):** Sempre recrie os containers para carregar os novos PEMs com `docker compose up -d --force-recreate`.
