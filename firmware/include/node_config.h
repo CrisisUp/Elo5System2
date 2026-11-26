@@ -136,3 +136,17 @@ namespace Timings {
   constexpr unsigned long INTERVALO_DHT_MS       = 2000UL;
   constexpr unsigned long MQTT_RETRY_MS          = 5000UL;
 }
+
+// =========================================================================
+// ELO5_PROD_HARDENING_V1 — Supervisão EOL, Relé Industrial e Watchdog TWDT
+// =========================================================================
+namespace ProdHardening {
+  constexpr uint32_t WATCHDOG_TIMEOUT_SEC = 5;
+#if defined(NODE_RACK)
+  constexpr int RELAY_LOCK_PIN = 19;
+  constexpr bool RELAY_ACTIVE_HIGH = true;
+  constexpr int EOL_SENSE_PIN = 34; // ADC1 (divisor 10k/10k: ~2048 fechado, >3200 aberto, <350 fio cortado)
+  constexpr int EOL_ADC_WIRE_CUT_MAX = 350;
+  constexpr int EOL_ADC_OPEN_MIN = 3100;
+#endif
+}

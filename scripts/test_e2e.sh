@@ -232,10 +232,10 @@ step "8/8 Verificando compilação do firmware ESP32 (PlatformIO)"
 if [[ "$SKIP_FIRMWARE" == "true" ]]; then
   warn "Compilação do firmware ignorada (--skip-firmware)"
 elif command -v pio >/dev/null 2>&1; then
-  pio run -d firmware -e esp32_hardware_real >/dev/null
-  ok "Firmware compilado com sucesso (esp32_hardware_real)"
-  pio run -d firmware -e esp32_wokwi_sim >/dev/null
-  ok "Firmware compilado com sucesso (esp32_wokwi_sim)"
+  pio run -d firmware -e porta_hardware -e porta_wokwi_sim -e rack_hardware -e rack_wokwi_sim >/dev/null
+  ok "Firmware compilado com sucesso (porta_hardware -e porta_wokwi_sim -e rack_hardware -e rack_wokwi_sim)"
+  pio run -d firmware -e porta_hardware -e porta_wokwi_sim -e rack_hardware -e rack_wokwi_sim >/dev/null
+  ok "Firmware compilado com sucesso (porta_hardware -e porta_wokwi_sim -e rack_hardware -e rack_wokwi_sim)"
 else
   warn "PlatformIO (pio) não encontrado no PATH; pulando compilação do firmware"
 fi

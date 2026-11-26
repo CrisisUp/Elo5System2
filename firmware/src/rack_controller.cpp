@@ -1,3 +1,4 @@
+#include "esp_task_wdt.h"
 /**
  * @file rack_controller.cpp
  * @brief Controlador do Rack (NODE_RACK): NFC 2ª etapa, porta rack, ultrassônico, DHT22, OLED, servo e ESP-NOW.
@@ -84,6 +85,11 @@ void moverServo(uint8_t angulo) {
   if (angulo > 180) angulo = 180;
   uint32_t duty = SERVO_MIN_DUTY + ((uint32_t)angulo * (SERVO_MAX_DUTY - SERVO_MIN_DUTY)) / 180U;
   ledcWriteChannel(SERVO_CH, duty);
+  const bool destravar = (angulo > 10);
+  const uint8_t relayLevel = destravar
+      ? (ProdHardening::RELAY_ACTIVE_HIGH ? HIGH : LOW)
+      : (ProdHardening::RELAY_ACTIVE_HIGH ? LOW : HIGH);
+  digitalWrite(ProdHardening::RELAY_LOCK_PIN, relayLevel);
 }
 
 void enviarSyncEspNow(uint8_t tipo) {
@@ -103,6 +109,26 @@ void publicarEvento(const char* topic, const char* stage, const char* eventType,
       proximoEventId(), gerarTimestampIso(), stage, eventType, severity,
       sessionIdAtiva, "uid_nfc_operador", uidOperador, ocupacaoSala, dataDoc);
   mqttClient.publish(topic, json.c_str(), false);
+}
+
+
+void verificarSupervisaoEol() {
+  static unsigned long ultimoAlertaEolMs = 0;
+  const int rawAdc = analogRead(ProdHardening::EOL_SENSE_PIN);
+  if (rawAdc < ProdHardening::EOL_ADC_WIRE_CUT_MAX) {
+    alarmeRackAtivo = true;
+    unsigned long agora = millis();
+    if (agora - ultimoAlertaEolMs > 5000UL) {
+      ultimoAlertaEolMs = agora;
+      Serial.printf("[RACK][EOL_TAMPER] Fio cortado ou circuito aberto! ADC=%d\n", rawAdc);
+      JsonDocument doc;
+      doc["sensor"] = "reed_rack_eol";
+      doc["tamper_type"] = "TAMPER_WIRE_CUT";
+      doc["adc_raw"] = rawAdc;
+      doc["porta_rack_aberta"] = portaRackAberta;
+      publicarEvento(MqttTopics::RACK_PORTA_ESTADO, "rack_seguranca", "TAMPER_WIRE_CUT", "CRIT", doc);
+    }
+  }
 }
 
 void processarMensagensEspNow() {

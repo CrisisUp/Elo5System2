@@ -1,3 +1,4 @@
+#include "esp_task_wdt.h"
 /**
  * @file porta_controller.cpp
  * @brief Controlador da Sala CPD (NODE_PORTA): NFC entrada, PIR, saída por botão, pânico e ESP-NOW.

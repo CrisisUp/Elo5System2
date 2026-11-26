@@ -2,7 +2,7 @@ SHELL := /bin/bash
 PIO   ?= pio
 WOKWI ?= wokwi-cli
 
-.PHONY: help build build-porta build-rack build-sim lint-wokwi test-e2e up down logs clean
+.PHONY: setup help build build-porta build-rack build-sim lint-wokwi test-e2e up down logs clean
 
 help:
 	@echo "Alvos disponíveis — Elo5System:"
@@ -45,3 +45,11 @@ logs:
 
 clean:
 	cd firmware && $(PIO) run -t clean
+
+setup:
+	@test -f .env || (test -f .env.example && cp .env.example .env || true)
+	@mkdir -p mosquitto/config/certs
+	@echo "[setup] Ambiente e diretórios verificados."
+
+sim:
+	@SIM_UID="${SIM_UID:-04A1B2C3D4}" SIM_DELAY="${SIM_DELAY:-0.2}" docker compose --profile sim run --rm -e SIM_UID -e SIM_DELAY elo5-sim 2>/dev/null || SIM_UID="${SIM_UID:-04A1B2C3D4}" SIM_DELAY="${SIM_DELAY:-0.2}" docker compose run --rm -e SIM_UID -e SIM_DELAY elo5-sim
