@@ -4,7 +4,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-os.environ.setdefault("MQTT_BROKER", "127.0.0.1")
+import tempfile
+os.environ["DATABASE_URL"] = f"sqlite:///{tempfile.gettempdir()}/elo5_pytest_boot.db"
+os.environ["MQTT_BROKER"] = "127.0.0.1"
 os.environ.setdefault("MQTT_PORT", "1883")
 
 import database  # noqa: E402

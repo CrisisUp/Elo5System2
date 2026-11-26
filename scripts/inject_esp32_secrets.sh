@@ -54,9 +54,7 @@ def replace_raw_literal(text: str, var_name: str, pem_body: str) -> str:
     )
     if not pattern.search(text):
         raise RuntimeError(f"Constante {var_name} não encontrada em {secrets_path}")
-    return pattern.sub(rf"\1
-{pem_body}
-\2", text, count=1)
+    return pattern.sub(lambda m: f"{m.group(1)}\n{pem_body}\n{m.group(2)}", text, count=1)
 
 content = replace_raw_literal(content, "SECRET_CA_CERT_PEM", ca_pem)
 content = replace_raw_literal(content, "SECRET_CLIENT_CERT_PEM", crt_pem)

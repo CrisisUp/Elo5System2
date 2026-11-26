@@ -194,7 +194,7 @@ bool publishElo5Event(
   doc["severity"]   = severity;
 
   JsonObject sess = doc["session"].to<JsonObject>();
-  sess["session_id"]       = ctx.sessionId.length() ? ctx.sessionId : nullptr;
+  sess["session_id"]       = ctx.sessionId.length() ? ctx.sessionId.c_str() : nullptr;
   sess["uid_nfc"]          = (uidNfc && strlen(uidNfc) > 0) ? uidNfc : nullptr;
   sess["uid_nfc_operador"] = (uidOperador && strlen(uidOperador) > 0) ? uidOperador : nullptr;
   sess["uid_nfc_saindo"]   = (uidSaindo && strlen(uidSaindo) > 0) ? uidSaindo : nullptr;
