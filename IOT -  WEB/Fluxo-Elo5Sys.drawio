@@ -1,0 +1,154 @@
+<mxfile host="app.diagrams.net" pages="1">
+  <diagram name="Fluxo-Arquitetura-Elo5" id="elo5-arch-flow-v2">
+    <mxGraphModel dx="1422" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="2339" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="lane-porta" value="NÓ 1: porta_controller (esp32-porta-01 — Sala CPD)" style="swimlane;whiteSpace=wrap;html=1;startSize=36;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="40" y="30" width="540" height="2180" as="geometry" />
+        </mxCell>
+        <mxCell id="p-start" value="Início / Boot&#xa;(Wi-Fi + MQTT mTLS + ESP-NOW)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="lane-porta">
+          <mxGeometry x="170" y="55" width="200" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="p-idle" value="Estado Inicial Sala&#xa;ocupacaoSala = 0 | sessionId = vazio&#xa;Polling contínuo MFRC522 (sem gerar log)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="lane-porta">
+          <mxGeometry x="135" y="150" width="270" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="p-card-present" value="Cartão NFC&#xa;aproximado?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="lane-porta">
+          <mxGeometry x="195" y="245" width="150" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="p-uid" value="Lê UID_NFC do cartão&#xa;Avalia permissão de acesso" style="shape=trapezoid;perimeter=trapezoidPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="lane-porta">
+          <mxGeometry x="155" y="375" width="230" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="p-perm" value="Tem permissão?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="lane-porta">
+          <mxGeometry x="200" y="455" width="140" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="p-denied" value="ACESSO NEGADO&#xa;MQTT: elo5/sala/acesso/nfc/evento&#xa;(decision: NEGADO + UID_NFC)" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="lane-porta">
+          <mxGeometry x="20" y="462" width="155" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="p-allowed" value="ACESSO PERMITIDO&#xa;Gera sessionId + ocupacaoSala = 1&#xa;Destrava porta + MQTT: NFC_ACCESS_EVALUATED" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="lane-porta">
+          <mxGeometry x="135" y="585" width="270" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="p-espnow-tx-entry" value="ESP-NOW TX: ESPNOW_SALA_ACESSO&#xa;(sessionId, uidAtivo, ocupacaoSala=1)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" vertex="1" parent="lane-porta">
+          <mxGeometry x="135" y="695" width="270" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="p-pir" value="Sensor PIR Sala CPD&#xa;Mudança de presença?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="lane-porta">
+          <mxGeometry x="185" y="785" width="170" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="p-pir-log" value="MQTT: elo5/sala/presenca/pir&#xa;PIR_MOTION_CHANGED (com sessionId)" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="lane-porta">
+          <mxGeometry x="145" y="915" width="250" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="p-panic-check" value="Botão Pânico (GPIO 26)&#xa;acionado?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="lane-porta">
+          <mxGeometry x="185" y="1015" width="170" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="p-panic-act" value="ALERTA CRÍTICO PÂNICO&#xa;LED Vermelho + Buzzer + MQTT (CRIT)&#xa;ESP-NOW TX: ESPNOW_SALA_PANICO" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="lane-porta">
+          <mxGeometry x="135" y="1145" width="270" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="p-exit-btn" value="Botão Saída (GPIO 14)&#xa;pressionado?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="lane-porta">
+          <mxGeometry x="185" y="1620" width="170" height="105" as="geometry" />
+        </mxCell>
+        <mxCell id="p-exit-tx" value="ocupacaoSala = 0 | Trava porta&#xa;MQTT: EXIT_BUTTON_PRESSED + SESSION_RESET&#xa;ESP-NOW TX: ESPNOW_SALA_SAIDA" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" vertex="1" parent="lane-porta">
+          <mxGeometry x="125" y="1760" width="290" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="p-remote-alarm" value="Recebeu alarme crítico do Rack&#xa;via ESP-NOW (ESPNOW_RACK_EVENTO)?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="lane-porta">
+          <mxGeometry x="170" y="1875" width="200" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="p-door-alarm" value="Alarme Local na Porta da Sala&#xa;LED Vermelho piscando + Buzzer intermitente&#xa;(Impede técnico sair com rack aberto)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="lane-porta">
+          <mxGeometry x="130" y="2025" width="280" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="lane-bus" value="BARRAMENTO DE COMUNICAÇÃO&#xa;(ESP-NOW + MQTT mTLS :8883)" style="swimlane;whiteSpace=wrap;html=1;startSize=36;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="620" y="30" width="320" height="2180" as="geometry" />
+        </mxCell>
+        <mxCell id="b-heartbeat" value="Heartbeat ESP-NOW (a cada 3 s)&#xa;ESPNOW_SYNC_ESTADO&#xa;Sincroniza ocupação, porta e alarmes" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" vertex="1" parent="lane-bus">
+          <mxGeometry x="35" y="150" width="250" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="b-msg-entry" value="Pacote ESP-NOW (Unicast/Broadcast)&#xa;Propaga sessionId + UID_NFC para o Rack" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#9673a6;" vertex="1" parent="lane-bus">
+          <mxGeometry x="35" y="690" width="250" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="b-mqtt" value="Broker Mosquitto mTLS (:8883)&#xa;Ingestão FastAPI (Elo5api) -> PostgreSQL&#xa;Telemetria InfluxDB + Grafana" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=12;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="lane-bus">
+          <mxGeometry x="45" y="1310" width="230" height="105" as="geometry" />
+        </mxCell>
+        <mxCell id="b-msg-exit" value="Pacote ESP-NOW: ESPNOW_SALA_SAIDA&#xa;Rack verifica estado do Reed Switch" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#9673a6;" vertex="1" parent="lane-bus">
+          <mxGeometry x="35" y="1765" width="250" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="b-msg-alarm" value="Pacote ESP-NOW: ESPNOW_RACK_EVENTO&#xa;(portaRackAberta=1, alarmeAtivo=1)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="lane-bus">
+          <mxGeometry x="35" y="1898" width="250" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="lane-rack" value="NÓ 2: rack-controller (esp32-rack-01 — Rack 01)" style="swimlane;whiteSpace=wrap;html=1;startSize=36;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="980" y="30" width="620" height="2180" as="geometry" />
+        </mxCell>
+        <mxCell id="r-boot" value="Início / Boot Rack&#xa;OLED SSD1306 + DHT22 + LDR + Servo (0°)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="lane-rack">
+          <mxGeometry x="190" y="55" width="240" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="r-rx-session" value="Recebe Sessão via ESP-NOW&#xa;Vincula sessionId e uidOperador&#xa;Atualiza OLED (Link:OK | Sala Ocup: 1)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="lane-rack">
+          <mxGeometry x="175" y="688" width="270" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="r-nfc2" value="Operador passou NFC 2ª Etapa&#xa;no leitor do Rack?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="lane-rack">
+          <mxGeometry x="210" y="795" width="200" height="105" as="geometry" />
+        </mxCell>
+        <mxCell id="r-unlock" value="Autoriza Manutenção (janela 15 s)&#xa;Servo destrava rack (90°) + Buzzer OK&#xa;MQTT: elo5/rack/acesso/nfc/evento" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="lane-rack">
+          <mxGeometry x="340" y="930" width="250" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="r-door-check" value="Porta do Rack&#xa;(Reed Switch GPIO 25)&#xa;está ABERTA?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="lane-rack">
+          <mxGeometry x="210" y="1040" width="200" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="r-door-closed" value="Porta FECHADA&#xa;Trava servo (0°) | Sem leitura HC-SR04&#xa;MQTT: elo5/rack/porta/estado (FECHADA)" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="lane-rack">
+          <mxGeometry x="25" y="1190" width="235" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="r-auth-check" value="Abertura foi&#xa;autorizada por NFC?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="lane-rack">
+          <mxGeometry x="365" y="1185" width="180" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="r-tamper" value="VIOLAÇÃO FÍSICA DO RACK!&#xa;Alarme Crítico Local + ESP-NOW TX&#xa;MQTT: RACK_DOOR_CHANGED (ALERT)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="lane-rack">
+          <mxGeometry x="345" y="1320" width="245" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="r-prox" value="Porta Aberta Autorizada&#xa;HC-SR04 mede proximidade (cm) a cada 1 s&#xa;MQTT: elo5/rack/proximidade/cm" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="lane-rack">
+          <mxGeometry x="155" y="1430" width="290" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="r-env" value="Telemetria Contínua (DHT22 + LDR + OLED)&#xa;MQTT: elo5/rack/telemetria/ambiente" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="lane-rack">
+          <mxGeometry x="165" y="1535" width="270" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="r-exit-door-check" value="Ao receber ESPNOW_SALA_SAIDA:&#xa;Porta do Rack ainda está ABERTA?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="lane-rack">
+          <mxGeometry x="190" y="1740" width="240" height="115" as="geometry" />
+        </mxCell>
+        <mxCell id="r-exit-alarm" value="ALARME CRÍTICO NA SAÍDA!&#xa;MQTT: RACK_DOOR_LEFT_OPEN_ON_EXIT (CRIT)&#xa;ESP-NOW TX: ESPNOW_RACK_EVENTO (alarme=1)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="lane-rack">
+          <mxGeometry x="315" y="1895" width="280" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="r-exit-ok" value="Sessão Encerrada com Segurança&#xa;Limpa sessionId e uidOperador&#xa;Retorna ao estado de prontidão" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="lane-rack">
+          <mxGeometry x="45" y="1900" width="220" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="p-start" target="p-idle" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="p-idle" target="p-card-present" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" value="Não (aguarda)" edge="1" parent="1" source="p-card-present" target="p-idle" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="520" y="325" /><mxPoint x="520" y="212" /></Array></mxGeometry></mxCell>
+        <mxCell id="e4" value="Sim" edge="1" parent="1" source="p-card-present" target="p-uid" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="p-uid" target="p-perm" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" value="Não" edge="1" parent="1" source="p-perm" target="p-denied" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="p-denied" target="p-idle" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="137" y="212" /></Array></mxGeometry></mxCell>
+        <mxCell id="e8" value="Sim" edge="1" parent="1" source="p-perm" target="p-allowed" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="p-allowed" target="p-espnow-tx-entry" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e10" edge="1" parent="1" source="p-espnow-tx-entry" target="b-msg-entry" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#9673a6;strokeWidth=2;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e11" edge="1" parent="1" source="b-msg-entry" target="r-rx-session" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#9673a6;strokeWidth=2;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e12" edge="1" parent="1" source="p-espnow-tx-entry" target="p-pir" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e13" value="Sim" edge="1" parent="1" source="p-pir" target="p-pir-log" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e14" edge="1" parent="1" source="p-pir-log" target="p-panic-check" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e15" value="Sim" edge="1" parent="1" source="p-panic-check" target="p-panic-act" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e16" value="Não" edge="1" parent="1" source="p-panic-check" target="p-exit-btn" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e17" value="Sim" edge="1" parent="1" source="p-exit-btn" target="p-exit-tx" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e18" edge="1" parent="1" source="p-exit-tx" target="b-msg-exit" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#9673a6;strokeWidth=2;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e19" edge="1" parent="1" source="b-msg-exit" target="r-exit-door-check" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#9673a6;strokeWidth=2;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e20" edge="1" parent="1" source="r-rx-session" target="r-nfc2" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e21" value="Sim" edge="1" parent="1" source="r-nfc2" target="r-unlock" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e22" value="Não" edge="1" parent="1" source="r-nfc2" target="r-door-check" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e23" edge="1" parent="1" source="r-unlock" target="r-door-check" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e24" value="Não" edge="1" parent="1" source="r-door-check" target="r-door-closed" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e25" value="Sim" edge="1" parent="1" source="r-door-check" target="r-auth-check" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e26" value="Não (violação)" edge="1" parent="1" source="r-auth-check" target="r-tamper" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e27" value="Sim" edge="1" parent="1" source="r-auth-check" target="r-prox" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e28" edge="1" parent="1" source="r-prox" target="r-env" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e29" value="Sim (CRÍTICO)" edge="1" parent="1" source="r-exit-door-check" target="r-exit-alarm" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e30" value="Não (Fechada)" edge="1" parent="1" source="r-exit-door-check" target="r-exit-ok" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e31" edge="1" parent="1" source="r-exit-alarm" target="b-msg-alarm" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#b85450;strokeWidth=2;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e32" edge="1" parent="1" source="b-msg-alarm" target="p-remote-alarm" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#b85450;strokeWidth=2;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e33" value="Sim" edge="1" parent="1" source="p-remote-alarm" target="p-door-alarm" style="edgeStyle=orthogonalEdgeStyle;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
