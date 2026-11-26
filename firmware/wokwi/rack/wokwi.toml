@@ -1,0 +1,5 @@
+[wokwi]
+version = 1
+firmware = '../../.pio/build/rack_wokwi_sim/firmware.bin'
+elf = '../../.pio/build/rack_wokwi_sim/firmware.elf'
+rfc2217ServerPort = 4001

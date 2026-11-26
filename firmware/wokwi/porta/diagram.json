@@ -1,0 +1,461 @@
+{
+  "version": 1,
+  "author": "Cristiano",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "wokwi-breadboard-half",
+      "id": "bb1",
+      "top": -195,
+      "left": -1206.8,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-breadboard-half",
+      "id": "bb2",
+      "top": 83.4,
+      "left": -1206.8,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-breadboard-mini",
+      "id": "bb4",
+      "top": -366.2,
+      "left": -1250.4,
+      "attrs": {}
+    },
+    {
+      "type": "board-esp32-devkit-c-v4",
+      "id": "esp1",
+      "top": -97.66,
+      "left": -1061.9,
+      "rotate": 90,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-rgb-led",
+      "id": "rgb2",
+      "top": -168.8,
+      "left": -949.3,
+      "attrs": {}
+    },
+    {
+      "type": "board-mfrc522",
+      "id": "rfid2",
+      "top": 405.24,
+      "left": -1222.15,
+      "rotate": 90,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-pir-motion-sensor",
+      "id": "pir2",
+      "top": -380,
+      "left": -1188.18,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-buzzer",
+      "id": "bz3",
+      "top": 240,
+      "left": -1075.2,
+      "rotate": 180,
+      "attrs": {
+        "volume": "0.1"
+      }
+    },
+    {
+      "type": "wokwi-servo",
+      "id": "servo1",
+      "top": 16.4,
+      "left": -1466,
+      "rotate": 180,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn_funcao",
+      "top": 195,
+      "left": -1250,
+      "attrs": {
+        "color": "blue",
+        "label": "Saida (14)"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn_panico",
+      "top": 255,
+      "left": -1250,
+      "attrs": {
+        "color": "red",
+        "label": "Panico (26)"
+      }
+    }
+  ],
+  "connections": [
+    [
+      "esp1:TX",
+      "$serialMonitor:RX",
+      "",
+      []
+    ],
+    [
+      "esp1:RX",
+      "$serialMonitor:TX",
+      "",
+      []
+    ],
+    [
+      "esp1:3V3",
+      "bb1:tp.1",
+      "red",
+      []
+    ],
+    [
+      "bb1:tp.2",
+      "bb2:tp.1",
+      "red",
+      []
+    ],
+    [
+      "bb2:5b.f",
+      "bb1:tp.4",
+      "red",
+      []
+    ],
+    [
+      "bb4:10b.i",
+      "bb2:tp.3",
+      "red",
+      []
+    ],
+    [
+      "esp1:GND.1",
+      "bb1:tn.1",
+      "black",
+      []
+    ],
+    [
+      "esp1:GND.2",
+      "bb2:tn.22",
+      "black",
+      []
+    ],
+    [
+      "bb1:tn.2",
+      "bb2:tn.2",
+      "black",
+      []
+    ],
+    [
+      "bb1:tn.10",
+      "bb4:5b.g",
+      "black",
+      []
+    ],
+    [
+      "pir2:VCC",
+      "bb4:10b.f",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "pir2:OUT",
+      "bb4:11b.f",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "pir2:GND",
+      "bb4:12b.f",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "bb4:12b.i",
+      "bb1:tn.9",
+      "black",
+      []
+    ],
+    [
+      "bb4:11b.i",
+      "bb1:17b.f",
+      "limegreen",
+      []
+    ],
+    [
+      "esp1:27",
+      "bb1:17b.j",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "rfid2:3.3V",
+      "bb2:5b.j",
+      "red",
+      []
+    ],
+    [
+      "rfid2:RST",
+      "bb2:6b.j",
+      "orange",
+      []
+    ],
+    [
+      "rfid2:GND",
+      "bb2:7b.j",
+      "black",
+      []
+    ],
+    [
+      "rfid2:MISO",
+      "bb2:9b.j",
+      "green",
+      []
+    ],
+    [
+      "rfid2:MOSI",
+      "bb2:10b.j",
+      "cyan",
+      []
+    ],
+    [
+      "rfid2:SCK",
+      "bb2:11b.j",
+      "gray",
+      []
+    ],
+    [
+      "rfid2:SDA",
+      "bb2:12b.j",
+      "magenta",
+      []
+    ],
+    [
+      "bb2:7b.f",
+      "bb2:tn.7",
+      "black",
+      []
+    ],
+    [
+      "esp1:5",
+      "bb2:18t.a",
+      "magenta",
+      []
+    ],
+    [
+      "esp1:18",
+      "bb2:19t.a",
+      "gray",
+      []
+    ],
+    [
+      "esp1:19",
+      "bb2:20t.a",
+      "green",
+      []
+    ],
+    [
+      "esp1:23",
+      "bb2:26t.a",
+      "cyan",
+      []
+    ],
+    [
+      "esp1:22",
+      "bb2:25t.a",
+      "orange",
+      []
+    ],
+    [
+      "bb2:20t.b",
+      "bb2:9b.f",
+      "green",
+      []
+    ],
+    [
+      "bb2:19t.b",
+      "bb2:11b.f",
+      "gray",
+      []
+    ],
+    [
+      "bb2:26t.b",
+      "bb2:10b.f",
+      "cyan",
+      []
+    ],
+    [
+      "bb2:18t.b",
+      "bb2:12b.f",
+      "magenta",
+      []
+    ],
+    [
+      "bb2:25t.b",
+      "bb2:6b.f",
+      "orange",
+      []
+    ],
+    [
+      "rgb2:R",
+      "bb1:26t.c",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "rgb2:COM",
+      "bb1:27t.d",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "rgb2:G",
+      "bb1:28t.c",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "rgb2:B",
+      "bb1:29t.c",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "rgb2:R",
+      "bb1:21b.f",
+      "red",
+      []
+    ],
+    [
+      "rgb2:G",
+      "bb1:20b.f",
+      "green",
+      []
+    ],
+    [
+      "rgb2:B",
+      "bb1:19b.f",
+      "blue",
+      []
+    ],
+    [
+      "rgb2:COM",
+      "bb1:tp.8",
+      "purple",
+      []
+    ],
+    [
+      "esp1:32",
+      "bb1:21b.j",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "esp1:33",
+      "bb1:20b.j",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "esp1:25",
+      "bb1:19b.j",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "esp1:4",
+      "servo1:PWM",
+      "orange",
+      []
+    ],
+    [
+      "servo1:GND",
+      "bb2:tn.1",
+      "black",
+      []
+    ],
+    [
+      "servo1:V+",
+      "bb2:tp.1",
+      "red",
+      []
+    ],
+    [
+      "bz3:1",
+      "bb2:17b.j",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "bz3:2",
+      "bb2:16b.j",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "esp1:13",
+      "bb2:16b.h",
+      "yellow",
+      []
+    ],
+    [
+      "bb2:17b.g",
+      "bb2:tn.23",
+      "black",
+      []
+    ],
+    [
+      "btn_funcao:1.r",
+      "esp1:14",
+      "blue",
+      []
+    ],
+    [
+      "btn_funcao:2.r",
+      "bb2:tn.14",
+      "black",
+      []
+    ],
+    [
+      "btn_panico:1.r",
+      "esp1:26",
+      "red",
+      []
+    ],
+    [
+      "btn_panico:2.r",
+      "bb2:tn.16",
+      "black",
+      []
+    ]
+  ],
+  "dependencies": {}
+}
