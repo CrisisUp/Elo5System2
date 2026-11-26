@@ -41,13 +41,29 @@ struct __attribute__((packed)) PacoteEspNow {
 // =========================================================================
 class Elo5EspNowLink {
   public:
+    static bool isBroadcastMac(const uint8_t mac[6]) {
+      for (int i = 0; i < 6; i++) {
+        if (mac[i] != 0xFF) return false;
+      }
+      return true;
+    }
+
     bool begin(const uint8_t peerMac[6]) {
       memcpy(_peerMac, peerMac, 6);
+      _unicastStrict = !isBroadcastMac(_peerMac);
+      _lastRxSeq = 0;
+      _lastRxUptimeMs = 0;
       WiFi.mode(WIFI_STA);
       esp_wifi_set_channel(EspNowConfig::DEFAULT_CHANNEL, WIFI_SECOND_CHAN_NONE);
 
-      Serial.print("[ESPNOW] MAC STA local: ");
+      Serial.print("[ESPNOW][MAC_STA] Local: ");
       Serial.println(WiFi.macAddress());
+      if (_unicastStrict) {
+        Serial.printf("[ESPNOW] Modo UNICAST ESTRITO ativo (peer=%02X:%02X:%02X:%02X:%02X:%02X)\n",
+                      _peerMac[0], _peerMac[1], _peerMac[2], _peerMac[3], _peerMac[4], _peerMac[5]);
+      } else {
+        Serial.println("[ESPNOW][AVISO] Operando em BROADCAST (FF:FF:FF:FF:FF:FF). Configure os MACs reais em node_config.h para producao!");
+      }
 
       if (esp_now_init() != ESP_OK) {
         Serial.println("[ESPNOW] Falha ao inicializar esp_now_init().");
@@ -122,17 +138,28 @@ class Elo5EspNowLink {
     static Elo5EspNowLink* _instance;
     uint8_t       _peerMac[6]  = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     bool          _ativo       = false;
-    uint32_t      _txSeq       = 0;
-    volatile bool _hasRx       = false;
+    bool          _unicastStrict = false;
+    uint32_t      _txSeq         = 0;
+    uint32_t      _lastRxSeq     = 0;
+    uint32_t      _lastRxUptimeMs = 0;
+    volatile bool _hasRx         = false;
     volatile bool _sendFailed  = false;
     unsigned long _lastRxMs    = 0;
     PacoteEspNow  _rxPkt       = {};
 
     static void _onRecvStatic(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
-      (void)info;
-      if (_instance == nullptr || len != sizeof(PacoteEspNow)) return;
+      if (_instance == nullptr || info == nullptr || len != sizeof(PacoteEspNow)) return;
+      if (_instance->_unicastStrict && memcmp(info->src_addr, _instance->_peerMac, 6) != 0) {
+        return; // Descarta pacote de origem nao pareada
+      }
       const PacoteEspNow* incoming = reinterpret_cast<const PacoteEspNow*>(data);
       if (incoming->versao != 1) return;
+      const bool peerReiniciou = (incoming->uptimeMs < _instance->_lastRxUptimeMs);
+      if (!peerReiniciou && incoming->seq <= _instance->_lastRxSeq) {
+        return; // Descarta quadro duplicado ou replay
+      }
+      _instance->_lastRxSeq      = incoming->seq;
+      _instance->_lastRxUptimeMs = incoming->uptimeMs;
       memcpy(&_instance->_rxPkt, incoming, sizeof(PacoteEspNow));
       _instance->_lastRxMs = millis();
       _instance->_hasRx    = true;
